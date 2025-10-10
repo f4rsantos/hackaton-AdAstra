@@ -1,0 +1,23 @@
+# Core Dependencies
+# NOTE: For GPU acceleration, install opencv-contrib-python with CUDA support
+# pip install opencv-contrib-python (includes CUDA modules if available)
+opencv-python>=4.12.0
+PyYAML>=6.0.0
+matplotlib>=3.10.0
+pandas>=2.3.0
+scipy>=1.11.0
+
+# SigMF support for RF signal annotations
+sigmf>=1.2.0
+
+# Optional: For Streamlit app (if using app.py)
+streamlit>=1.49.0
+plotly>=6.3.0
+seaborn>=0.13.0
+
+# Live feed processing dependencies
+requests>=2.31.0
+websocket-client>=1.6.0
+psutil>=5.9.0
+Pillow>=10.0.0
+numpy>=1.24.0
