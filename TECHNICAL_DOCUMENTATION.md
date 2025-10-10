@@ -1,63 +1,42 @@
 # Technical Documentation: RF Signal Detection and Classification System
 
+## How to Run
+
+Run `streamlit run app.py` on cmd to start
+
+---
+
 ## Table of Contents
 
-1. [Algorithmic Complexity Analysis](#algorithmic-complexity-analysis)
+1. [Component Explanations](#component-explanations)
 2. [Complete Workflow and Block Diagram](#complete-workflow-and-block-diagram)
 3. [Metric Definitions and Formulas](#metric-definitions-and-formulas)
 
 ---
 
-## 1. Algorithmic Complexity Analysis
+## 1. Component Explanations
 
-### 1.1 Overall System Complexity
-
-The complete detection pipeline has a worst-case time complexity of **O(N × M × W × H)** where:
-
-- **N** = number of input images
-- **M** = number of templates
-- **W × H** = image dimensions (width × height)
-
-However, through optimization strategies including chunking, parallel processing, and early termination, the practical complexity is significantly reduced.
-
-### 1.2 Component-by-Component Complexity Analysis
-
-#### 1.2.1 Image Preprocessing Pipeline
+### 1.1 Image Preprocessing Pipeline
 
 **Purpose**: Standardize input images to optimal dimensions for template matching while preserving signal characteristics.
 
 **Operations**:
 
-1. **Image Loading**: O(W × H)
+1. **Image Loading**
 
    - Single pass through pixel data
    - Memory allocation for image buffer
 
-2. **Resize Operation**: O(W₁ × H₁ + W₂ × H₂)
+2. **Resize Operation**
 
-   - W₁ × H₁: Original dimensions
-   - W₂ × H₂: Target dimensions (31,778 × 384)
+   - Original dimensions → Target dimensions (31,778 × 384)
    - Uses Lanczos resampling (high-quality interpolation)
-   - Practical complexity: ~O(W₁ × H₁) as W₂ × H₂ is fixed
 
-3. **Image Chunking**: O(W₂ × H₂)
+3. **Image Chunking**
    - Linear scan to extract 2048×384 chunks
-   - No pixel processing, only memory copying
    - Number of chunks: ⌈W₂ / 2048⌉ ≈ 16 chunks per image
 
-**Total Preprocessing Complexity**: **O(N × W × H)**
-
-- Parallelizable across images
-- Bottleneck: Disk I/O for large images (>100MB spectrograms)
-
-**Memory Footprint**:
-
-- Original image: W × H × 3 bytes (RGB)
-- Resized image: 31,778 × 384 × 3 ≈ 36.6 MB
-- Chunks: 16 × (2048 × 384 × 3) ≈ 37.7 MB
-- Peak memory: ~80 MB per image
-
-#### 1.2.2 Template Matching (Core Algorithm)
+### 1.2 Template Matching (Core Algorithm)
 
 **Method**: Normalized Cross-Correlation with Multi-Scale Matching
 
@@ -76,38 +55,26 @@ Where:
 - Ī, T̄: Mean intensities of image region and template
 - σᵢ, σₜ: Standard deviations of image region and template
 
-**Complexity Analysis**:
+**Process**:
 
-1. **Single Template Match**: O(W × H × Tₓ × Tᵧ)
+1. **Single Template Match**
 
-   - For each position (x,y) in image W×H
-   - Compute correlation over template size Tₓ×Tᵧ
+   - For each position (x,y) in image, compute correlation over template size
 
-2. **OpenCV Optimization**:
+2. **OpenCV Optimization**
 
-   - Uses Fast Fourier Transform (FFT) when Tₓ×Tᵧ > threshold
-   - FFT complexity: O((W×H) × log(W×H))
-   - Significantly faster for large templates
+   - Uses Fast Fourier Transform (FFT) for large templates
    - Our implementation uses cv2.TM_CCOEFF_NORMED method
 
-3. **Multi-Template Matching**: O(M × W × H × log(W×H))
+3. **Multi-Template Matching**
 
    - M templates processed sequentially
-   - Each template match is independent (parallelizable)
+   - Each template match is independent
 
-4. **Threshold Filtering**: O(K)
-   - K = number of detection candidates
-   - Typically K << W×H (sparse detections)
+4. **Threshold Filtering**
+   - Filter detection candidates above threshold
 
-**Practical Performance**:
-
-- Single chunk (2048×384) with M=2 templates: ~50-100ms
-- Bottleneck: Template convolution operation
-- GPU acceleration potential: 10-20× speedup
-
-#### 1.2.3 Non-Maximum Suppression (NMS)
-
-**Purpose**: Eliminate duplicate detections from overlapping template matches.
+### 1.3 Non-Maximum Suppression (NMS)
 
 **Algorithm**: Greedy Selection with IoU Threshold
 
@@ -127,30 +94,18 @@ NMS(detections, iou_threshold):
     return selected
 ```
 
-**Complexity**: O(K²)
-
-- K = number of detections before NMS
-- Worst case: All detections evaluated against each other
-- Typical case: O(K × log K) due to early pruning
-
-**IoU Calculation**: O(1) per pair
+**IoU Calculation**:
 
 ```
 IoU = Area(intersection) / Area(union)
 ```
 
-**Practical Performance**:
-
-- K typically < 100 per chunk
-- Total NMS time: <10ms per chunk
-
-#### 1.2.4 Post-Processing Operations
+### 1.4 Post-Processing Operations
 
 **1. Consolidation of Overlapping Detections**
 
 **Complexity**: O(K²)
 
-- Similar to NMS but merges instead of suppressing
 - Groups detections with IoU > threshold
 - Averages bounding boxes and confidences
 
@@ -164,11 +119,6 @@ IoU = Area(intersection) / Area(union)
 - Vertical alignment > 70% (same frequency band)
 - Same template class
 
-**Complexity**: O(K × log K)
-
-- Sort by X-coordinate: O(K × log K)
-- Linear scan for adjacent pairs: O(K)
-
 **3. Similarity-Based Classification**
 
 **Purpose**: Classify "Unidentified" signals by matching to known templates.
@@ -178,12 +128,6 @@ IoU = Area(intersection) / Area(union)
 - Height ratio: |h₁ - h₂| / max(h₁, h₂)
 - Y-position similarity: |y₁ - y₂| / image_height
 
-**Complexity**: O(U × C)
-
-- U = number of unidentified signals
-- C = number of classified signals
-- Typically U < 50, C < 50
-
 **Decision Rule**:
 
 ```
@@ -192,7 +136,7 @@ Classify as Template T if:
     y_position_similarity > 0.80
 ```
 
-#### 1.2.5 Coordinate Transformation (Chunk → Original)
+### 1.5 Coordinate Transformation (Chunk → Original)
 
 **Purpose**: Map detection coordinates from chunk space back to original image space for SigMF annotations.
 
@@ -216,14 +160,8 @@ Classify as Template T if:
    original_x = resized_x × (W_orig / W_resized)
    original_y = resized_y × (H_orig / H_resized)
    ```
-   **Complexity**: O(1) per detection
 
-**Total Transformation Complexity**: **O(D)**
-
-- D = total number of detections across all chunks
-- Typically D < 1000
-
-#### 1.2.6 SigMF Annotation Generation
+### 1.6 SigMF Annotation Generation
 
 **Purpose**: Convert pixel coordinates to time-frequency domain for RF signal analysis tools.
 
@@ -257,79 +195,7 @@ Classify as Template T if:
 **Metadata Extraction**:
 
 - Read .sigmf-data file size: O(1)
-- Parse .sigmf-meta JSON: O(size of JSON) ≈ O(1) for typical files
 - Calculate total_samples from file size and datatype
-
-### 1.3 Parallelization Strategy
-
-#### GPU Acceleration (Planned)
-
-**Suitable Operations**:
-
-1. Template matching convolution: 10-20× speedup
-2. Image preprocessing (resize, colormap): 5-10× speedup
-3. NMS can be parallelized with modified algorithm
-
-**Current Bottlenecks**:
-
-- Sequential template matching across chunks
-- Single-threaded post-processing
-
-#### Multi-Threading
-
-**Implemented**:
-
-- Chunk processing parallelization (16 chunks × 2-4 threads)
-- Template loading concurrent with detection
-
-**Potential**:
-
-- Parallel NMS per chunk
-- Asynchronous SigMF file writing
-
-### 1.4 Computational Implications
-
-#### Time Complexity Summary
-
-| Operation            | Complexity              | Typical Time  |
-| -------------------- | ----------------------- | ------------- |
-| Image Preprocessing  | O(N × W × H)            | ~200ms/image  |
-| Template Matching    | O(M × W × H × log(W×H)) | ~50ms/chunk   |
-| NMS                  | O(K²)                   | ~10ms         |
-| Post-processing      | O(K²)                   | ~20ms         |
-| Coordinate Transform | O(D)                    | <1ms          |
-| SigMF Generation     | O(D)                    | ~50ms         |
-| **Total per Image**  | -                       | **~1.5-2.5s** |
-
-#### Space Complexity Summary
-
-| Component       | Space            | Notes            |
-| --------------- | ---------------- | ---------------- |
-| Image Data      | O(N × W × H)     | Dominant factor  |
-| Templates       | O(M × Tₓ × Tᵧ)   | Cached in memory |
-| Detections      | O(D)             | Sparse, D << W×H |
-| Metadata        | O(N + M + D)     | Negligible       |
-| **Peak Memory** | **~100MB/image** | With 16 chunks   |
-
-#### Scalability Analysis
-
-**Current System**:
-
-- **Images**: Linear scaling O(N)
-- **Templates**: Linear scaling O(M)
-- **Image Size**: Quadratic O(W×H) but mitigated by chunking
-
-**Bottleneck Identification**:
-
-1. **Primary**: Template matching computation
-2. **Secondary**: Disk I/O for large spectrograms
-3. **Tertiary**: NMS for dense detection scenarios
-
-**Optimization Potential**:
-
-- GPU acceleration: 10-20× speedup
-- Chunk-level caching: Reduce redundant computation
-- Adaptive template scaling: Skip unlikely regions
 
 ---
 
@@ -1311,62 +1177,3 @@ For 101708×1229 image:
   acceptable_x_error < 0.05 × 101708 = 5085 pixels
   acceptable_y_error < 0.05 × 1229 = 61 pixels
 ```
-
----
-
-## 4. Summary and Optimization Opportunities
-
-### 4.1 Current System Performance
-
-**Strengths**:
-
-- ✅ Linear scalability with number of images
-- ✅ Effective chunking strategy reduces memory footprint
-- ✅ Robust post-processing pipeline
-- ✅ Accurate coordinate transformations
-- ✅ Standard SigMF output format
-
-**Bottlenecks**:
-
-- ⚠️ Template matching is compute-intensive
-- ⚠️ Sequential chunk processing
-- ⚠️ O(K²) complexity in NMS and consolidation
-
-### 4.2 Recommended Optimizations
-
-1. **GPU Acceleration**:
-
-   - Implement template matching on CUDA
-   - Expected speedup: 10-20×
-   - Complexity remains O(M × W × H) but with lower constant
-
-2. **Parallel Chunk Processing**:
-
-   - Process chunks concurrently on multiple cores
-   - Expected speedup: 3-4× on quad-core CPU
-   - Requires thread-safe template cache
-
-3. **Adaptive Template Matching**:
-
-   - Skip regions with low variance (empty spectrum)
-   - Expected speedup: 2-3× for sparse images
-   - Complexity: O(M × W_active × H_active)
-
-4. **Hierarchical NMS**:
-
-   - Use spatial hashing for O(K) average case
-   - Only compare nearby detections
-   - Reduces quadratic complexity
-
-5. **Incremental SigMF Writing**:
-   - Stream annotations to file as generated
-   - Reduces peak memory usage
-   - Enables processing of arbitrarily large datasets
-
----
-
-## Conclusion
-
-This system implements a comprehensive RF signal detection and classification pipeline with well-defined algorithmic complexity bounds. The primary computational cost lies in the template matching stage, which exhibits O(M × N × W × H) complexity but is amenable to significant optimization through parallelization and GPU acceleration. The coordinate transformation pipeline ensures accurate mapping from pixel space to physical time-frequency coordinates, enabling seamless integration with standard RF analysis tools through the SigMF format.
-
-All metrics are precisely defined with mathematical formulas, providing clear criteria for system performance evaluation and optimization. The modular architecture allows for targeted improvements in specific pipeline stages without affecting the overall workflow integrity.
