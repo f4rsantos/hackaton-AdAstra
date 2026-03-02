@@ -2,6 +2,7 @@
 # hackaton-AdAstra
 2nd Place winning project at a 2025 Hackaton
 
-Made by:
-Bernardo Reis
-Fernando Santos
+*Made by:*
+
+Bernardo Reis | Fernando Santos
+(To create a public repository, we chose to create a new one, that's why the number of commits is small)
